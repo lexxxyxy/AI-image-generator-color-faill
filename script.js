@@ -1,259 +1,225 @@
-const messageForm = document.querySelector(".prompt__form");
-const chatHistoryContainer = document.querySelector(".chats");
-const suggestionItems = document.querySelectorAll(".suggests__item");
+// Set the number of tags to display per page
+const tagsPerPage = 20;
 
-const themeToggleButton = document.getElementById("themeToggler");
-const clearChatButton = document.getElementById("deleteButton");
+// Event listener for the upload button
+document.getElementById("uploadButton").addEventListener("click", async () => {
+  // Elements and file handling
+  const fileInput = document.getElementById("imageInput");
+  const file = fileInput.files[0];
+  const imagePreview = document.getElementById("imagePreview");
+  const uploadModal = document.getElementById("uploadModal");
+  const uploadProgress = document.getElementById("uploadProgress");
 
-// State variables
-let currentUserMessage = null;
-let isGeneratingResponse = false;
+  // If no file is selected, show a toast message
+  if (!file) return showToast("Please select an image file first.");
 
-const GOOGLE_API_KEY = "AIzaSyA4edEszqFPEBSttvDVDSlBp23Mq5s7LlY";
-const API_REQUEST_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GOOGLE_API_KEY}`;
+  // Preview the selected image
+  const reader = new FileReader();
+  reader.onload = (e) => (imagePreview.src = e.target.result);
+  reader.readAsDataURL(file);
 
-const loadSavedChatHistory = () => {
-    const savedConversations = JSON.parse(localStorage.getItem("saved-api-chats")) || [];
-    const isLightTheme = localStorage.getItem("themeColor") === "light_mode";
+  // Imagga API credentials
+  const apiKey = "acc_e0154362b874dc6";
+  const apiSecret = "0bc8b4ee06031ae80b0b53ce1f4fd6f1";
+  const authHeader = "Basic " + btoa(`${apiKey}:${apiSecret}`);
 
-    document.body.classList.toggle("light_mode", isLightTheme);
-    themeToggleButton.innerHTML = isLightTheme ? '<i class="bx bx-moon"></i>' : '<i class="bx bx-sun"></i>';
+  // Prepare data for upload
+  const formData = new FormData();
+  formData.append("image", file);
 
-    chatHistoryContainer.innerHTML = '';
+  try {
+    uploadModal.style.display = "block";
+    uploadProgress.style.width = "0%";
 
-    savedConversations.forEach(conversation => {
+    const uploadResponse = await fetch("https://api.imagga.com/v2/uploads", {
+      method: "POST",
+      headers: { Authorization: authHeader },
+      body: formData,
+    });
 
-        const userMessageHtml = `
+    if (!uploadResponse.ok) throw new Error("Upload failed.");
 
-            <div class="message__content">
-                <img class="message__avatar" src="https://idnpacific.com/wp-content/uploads/2022/06/PP-WA-kosong-kacamata.jpg" alt="User avatar">
-               <p class="message__text">${conversation.userMessage}</p>
+    const contentLength = +uploadResponse.headers.get("Content-Length");
+    const reader = uploadResponse.body.getReader();
+    let receivedLength = 0;
+    let chunks = [];
+
+    const responseJson = await uploadResponse.json();
+    console.log("Upload Response JSON:", responseJson);
+
+    const responseArray = new Uint8Array(receivedLength);
+    let position = 0;
+    for (const chunk of chunks) {
+      responseArray.set(chunk, position);
+      position += chunk.length;
+    }
+
+    const text = new TextDecoder("utf-8").decode(responseArray);
+    const {
+      result: { upload_id },
+    } = JSON.parse(text);
+    const [colorResult, tagsResult] = await Promise.all([
+      fetch(`https://api.imagga.com/v2/colors?image_upload_id=${upload_id}`, {
+        headers: { Authorization: authHeader },
+      }).then((res) => res.json()),
+      fetch(`https://api.imagga.com/v2/tags?image_upload_id=${upload_id}`, {
+        headers: { Authorization: authHeader },
+      }).then((res) => res.json()),
+    ]);
+
+    displayColors(colorResult.result.colors);
+    displayTags(tagsResult.result.tags);
+  } catch (error) {
+    console.error("Error:", error);
+    showToast("An error occurred while processing the image!");
+  } finally {
+    uploadModal.style.display = "none";
+  }
+});
+
+const displayColors = (colors) => {
+  const colorsContainer = document.querySelector(".colors-container");
+  colorsContainer.innerHTML = "";
+
+  if (
+    ![
+      colors.background_colors,
+      colors.foreground_colors,
+      colors.image_colors,
+    ].some((arr) => arr.length)
+  ) {
+    colorsContainer.innerHTML = '<p class="error">Nothing to show...</p>';
+    return;
+  }
+  const generateColorSection = (title, colorData) => {
+    return `
+
+            <h3>${title}</h3>
+            <div class="results">
+                ${colorData
+                  .map(
+                    ({ html_code, closest_palette_color, percent }) => `
+                    <div class="result-item" data-color="${html_code}">
+                        <div>
+                            <div class="color-box" style="background-color: ${html_code}" title="Color code: ${html_code}"></div>
+                            <p>${html_code}<span> - ${closest_palette_color}</span></p>
+                        </div>
+                        <div class="progress-bar">
+                            <span>${percent.toFixed(2)}%</span>
+                            <div class="progress" style="width: ${percent}%"></div>
+                        </div>
+                    </div> 
+                `
+                  )
+                  .join("")}
             </div>
-        
         `;
+  };
 
-        const outgoingMessageElement = createChatMessageElement(userMessageHtml, "message--outgoing");
-        chatHistoryContainer.appendChild(outgoingMessageElement);
-        const responseText = conversation.apiResponse?.candidates?.[0]?.content?.parts?.[0]?.text;
-        const parsedApiResponse = marked.parse(responseText); 
-        const rawApiResponse = responseText;
+  colorsContainer.innerHTML += generateColorSection(
+    "Background Colors",
+    colors.background_colors
+  );
+  colorsContainer.innerHTML += generateColorSection(
+    "Foreground Colors",
+    colors.foreground_colors
+  );
+  colorsContainer.innerHTML += generateColorSection(
+    "Image Colors",
+    colors.image_colors
+  );
 
-        const responseHtml = `
+  document
+    .querySelectorAll(".colors-container .result-item")
+    .forEach((item) => {
+      item.addEventListener("click", () => {
+        const colorCode = item.getAttribute("data-color");
+        navigator.clipboard
+          .writeText(colorCode)
+          .then(() => showToast(`Copied: ${colorCode}`))
+          .catch(() => showToast("Failed to copy color code!"));
+      });
+    });
+};
+
+let allTags = [];
+let displayedTags = 0;
+
+const displayTags = (tags) => {
+  const tagsContainer = document.querySelector(".tags-container");
+  const resultList = tagsContainer.querySelector(".results");
+  const error = tagsContainer.querySelector(".error");
+  const seeMoreButton = document.getElementById("seeMoreButton");
+  const exportTagsButton = document.getElementById("exportTagsButton");
+
+  if (resultList) {
+    resultList.innerHTML = "";
+  } else {
+    const resultListContainer = document.createElement("div");
+    resultListContainer.className = "results";
+    tagsContainer.insertBefore(resultListContainer, seeMoreButton);
+  }
+
+  allTags = tags;
+  displayedTags = 0;
+
+  const showMoreTags = () => {
+    const tagsToShow = allTags.slice(
+      displayedTags,
+      displayedTags + tagsPerPage
+    );
+    displayedTags += tagsToShow.length;
+
+    const tagsHTML = tagsToShow
+      .map(
+        ({ tag: { en } }) => `
         
-           <div class="message__content">
-                <img class="message__avatar" src="https://idnpacific.com/wp-content/uploads/2022/06/PP-WA-kosong-kacamata.jpg" alt="Gemini avatar">
-                <p class="message__text"></p>
-                <div class="message__loading-indicator hide">
-                    <div class="message__loading-bar"></div>
-                    <div class="message__loading-bar"></div>
-                    <div class="message__loading-bar"></div>
-                </div>
+            <div class="result-item">
+                <p>${en}</p>
             </div>
-            <span onClick="copyMessageToClipboard(this)" class="message__icon hide"><i class='bx bx-copy-alt'></i></span>
-        
-        `;
+        `
+      )
+      .join("");
 
-        const incomingMessageElement = createChatMessageElement(responseHtml, "message--incoming");
-        chatHistoryContainer.appendChild(incomingMessageElement);
-
-        const messageTextElement = incomingMessageElement.querySelector(".message__text");
-
-        showTypingEffect(rawApiResponse, parsedApiResponse, messageTextElement, incomingMessageElement, true); 
-    });
-
-    document.body.classList.toggle("hide-header", savedConversations.length > 0);
-};
-
-
-const createChatMessageElement = (htmlContent, ...cssClasses) => {
-    const messageElement = document.createElement("div");
-    messageElement.classList.add("message", ...cssClasses);
-    messageElement.innerHTML = htmlContent;
-    return messageElement;
-}
-
-const showTypingEffect = (rawText, htmlText, messageElement, incomingMessageElement, skipEffect = false) => {
-    const copyIconElement = incomingMessageElement.querySelector(".message__icon");
-    copyIconElement.classList.add("hide");
-
-    if (skipEffect) {
-        messageElement.innerHTML = htmlText;
-        hljs.highlightAll();
-        addCopyButtonToCodeBlocks();
-        copyIconElement.classList.remove("hide");
-        isGeneratingResponse = false;
-        return;
+    if (resultList) {
+      resultList.innerHTML += tagsHTML;
     }
+    error.style.display = displayedTags > 0 ? "none" : "block";
+    seeMoreButton.style.display =
+      displayedTags < allTags.length ? "block" : "none";
+    exportTagsButton.style.display = displayedTags > 0 ? "block" : "none";
+  };
 
-    const wordsArray = rawText.split(' ');
-    let wordIndex = 0;
+  showMoreTags();
 
-    const typingInterval = setInterval(() => {
-        messageElement.innerText += (wordIndex === 0 ? '' : ' ') + wordsArray[wordIndex++];
-        if (wordIndex === wordsArray.length) {
-            clearInterval(typingInterval);
-            isGeneratingResponse = false;
-            messageElement.innerHTML = htmlText;
-            hljs.highlightAll();
-            addCopyButtonToCodeBlocks();
-            copyIconElement.classList.remove("hide");
-        }
-    }, 75);
+  seeMoreButton.addEventListener("click", showMoreTags);
+  exportTagsButton.addEventListener("click", exportTagsToFile);
 };
 
-const requestApiResponse = async (incomingMessageElement) => {
-    const messageTextElement = incomingMessageElement.querySelector(".message__text");
+const exportTagsToFile = () => {
+  if (allTags.length === 0) {
+    showToast("No tags available to export!");
+    return;
+  }
 
-    try {
-        const response = await fetch(API_REQUEST_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: [{ role: "user", parts: [{ text: currentUserMessage }] }]
-            }),
-        });
-
-        const responseData = await response.json();
-        if (!response.ok) throw new Error(responseData.error.message);
-
-        const responseText = responseData?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!responseText) throw new Error("Invalid API response.");
-
-        const parsedApiResponse = marked.parse(responseText);
-        const rawApiResponse = responseText;
-
-        showTypingEffect(rawApiResponse, parsedApiResponse, messageTextElement, incomingMessageElement);
-
-        let savedConversations = JSON.parse(localStorage.getItem("saved-api-chats")) || [];
-        savedConversations.push({
-            userMessage: currentUserMessage,
-            apiResponse: responseData
-        });
-        localStorage.setItem("saved-api-chats", JSON.stringify(savedConversations));
-    } catch (error) {
-        isGeneratingResponse = false;
-        messageTextElement.innerText = error.message;
-        messageTextElement.closest(".message").classList.add("message--error");
-    } finally {
-        incomingMessageElement.classList.remove("message--loading");
-    }
+  const tagsText = allTags.map(({ tag: { en } }) => en).join("\n");
+  const blob = new Blob([tagsText], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "Tags.txt";
+  a.click();
+  URL.revokeObjectURL(url);
 };
 
-const addCopyButtonToCodeBlocks = () => {
-    const codeBlocks = document.querySelectorAll('pre');
-    codeBlocks.forEach((block) => {
-        const codeElement = block.querySelector('code');
-        let language = [...codeElement.classList].find(cls => cls.startsWith('language-'))?.replace('language-', '') || 'Text';
-
-        const languageLabel = document.createElement('div');
-        languageLabel.innerText = language.charAt(0).toUpperCase() + language.slice(1);
-        languageLabel.classList.add('code__language-label');
-        block.appendChild(languageLabel);
-
-        const copyButton = document.createElement('button');
-        copyButton.innerHTML = `<i class='bx bx-copy'></i>`;
-        copyButton.classList.add('code__copy-btn');
-        block.appendChild(copyButton);
-
-        copyButton.addEventListener('click', () => {
-            navigator.clipboard.writeText(codeElement.innerText).then(() => {
-                copyButton.innerHTML = `<i class='bx bx-check'></i>`;
-                setTimeout(() => copyButton.innerHTML = `<i class='bx bx-copy'></i>`, 2000);
-            }).catch(err => {
-                console.error("Copy failed:", err);
-                alert("Unable to copy text!");
-            });
-        });
-    });
+const showToast = (message) => {
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.classList.add("show"), 100);
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => document.body.removeChild(toast), 500);
+  }, 3000);
 };
-
-const displayLoadingAnimation = () => {
-    const loadingHtml = `
-
-        <div class="message__content">
-            <img class="message__avatar" src="https://idnpacific.com/wp-content/uploads/2022/06/PP-WA-kosong-kacamata.jpg" alt="Gemini avatar">
-            <p class="message__text"></p>
-            <div class="message__loading-indicator">
-                <div class="message__loading-bar"></div>
-                <div class="message__loading-bar"></div>
-                <div class="message__loading-bar"></div>
-            </div>
-        </div>
-        <span onClick="copyMessageToClipboard(this)" class="message__icon hide"><i class='bx bx-copy-alt'></i></span>
-    
-    `;
-
-    const loadingMessageElement = createChatMessageElement(loadingHtml, "message--incoming", "message--loading");
-    chatHistoryContainer.appendChild(loadingMessageElement);
-
-    requestApiResponse(loadingMessageElement);
-};
-
-const copyMessageToClipboard = (copyButton) => {
-    const messageContent = copyButton.parentElement.querySelector(".message__text").innerText;
-
-    navigator.clipboard.writeText(messageContent);
-    copyButton.innerHTML = `<i class='bx bx-check'></i>`; 
-    setTimeout(() => copyButton.innerHTML = `<i class='bx bx-copy-alt'></i>`, 1000); 
-};
-
-const handleOutgoingMessage = () => {
-    currentUserMessage = messageForm.querySelector(".prompt__form-input").value.trim() || currentUserMessage;
-    if (!currentUserMessage || isGeneratingResponse) return; 
-
-    isGeneratingResponse = true;
-
-    const outgoingMessageHtml = `
-    
-        <div class="message__content">
-            <img class="message__avatar" src="https://idnpacific.com/wp-content/uploads/2022/06/PP-WA-kosong-kacamata.jpg" alt="User avatar">
-            <p class="message__text"></p>
-        </div>
-
-    `;
-
-    const outgoingMessageElement = createChatMessageElement(outgoingMessageHtml, "message--outgoing");
-    outgoingMessageElement.querySelector(".message__text").innerText = currentUserMessage;
-    chatHistoryContainer.appendChild(outgoingMessageElement);
-
-    messageForm.reset(); 
-    document.body.classList.add("hide-header");
-    setTimeout(displayLoadingAnimation, 500); 
-};
-
-
-themeToggleButton.addEventListener('click', () => {
-    const isLightTheme = document.body.classList.toggle("light_mode");
-    localStorage.setItem("themeColor", isLightTheme ? "light_mode" : "dark_mode");
-
-    const newIconClass = isLightTheme ? "bx bx-moon" : "bx bx-sun";
-    themeToggleButton.querySelector("i").className = newIconClass;
-});
-
-clearChatButton.addEventListener('click', () => {
-    if (confirm("Are you sure you want to delete all chat history?")) {
-        localStorage.removeItem("saved-api-chats");
-
-        loadSavedChatHistory();
-
-        currentUserMessage = null;
-        isGeneratingResponse = false;
-    }
-});
-
-
-suggestionItems.forEach(suggestion => {
-    suggestion.addEventListener('click', () => {
-        currentUserMessage = suggestion.querySelector(".suggests__item-text").innerText;
-        handleOutgoingMessage();
-    });
-});
-
-
-messageForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    handleOutgoingMessage();
-});
-
-loadSavedChatHistory();
-

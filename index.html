@@ -1,87 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
-    <link rel="stylesheet" href="style.css">
-    <title>Iskariot Gemini</title>
-</head>
-
-<body>
-
-    <nav class="navbar">
-        <h3 class="navbar__logo">Iskariot Gemini</h3>
-        <button class="navbar__button" id="themeToggler"><i class='bx bx-sun'></i></button>
-    </nav>
-
-    <header class="header">
-        <div class="header__title">
-            <h1>Hello, semua gemini hadir</h1>
-            <h2>Apakah saya bisa bantu??</h2>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css" />
+    <title>Ai Image Detector</title>
+  </head>
+  <body>
+    <h1>AI Image Detector</h1>
+    <div class="wrapper">
+      <div class="upload-container">
+        <h3>Upload Your Image</h3>
+        <div class="buttons">
+          <input
+            type="file"
+            id="imageInput"
+            accept="image/*"
+            style="display: none"
+          />
+          <button
+            class="file-input-button"
+            onclick="document.getElementById('imageInput').click();"
+          >
+            Choose File
+          </button>
+          <button id="uploadButton">Analyze Image</button>
         </div>
-        <div class="suggests">
-            <div class="suggests__item">
-                <p class="suggests__item-text">
-                   Berikan aku Kata kata hari ini
-                </p>
-                <div class="suggests__item-icon">
-                    <i class='bx bx-stopwatch'></i>
-                </div>
-            </div>
-            <div class="suggests__item">
-                <p class="suggests__item-text">
-                  Siapakah albert einstein
-                </p>
-                <div class="suggests__item-icon">
-                    <i class='bx bx-edit-alt'></i>
-                </div>
-            </div>
-            <div class="suggests__item">
-                <p class="suggests__item-text">
-                   Apa arti coding
-                </p>
-                <div class="suggests__item-icon">
-                    <i class='bx bx-compass'></i>
-                </div>
-            </div>
-            <div class="suggests__item">
-                <p class="suggests__item-text">
-                  Berikan aku 10 nama yang keren
-                </p>
-                <div class="suggests__item-icon">
-                    <i class='bx bx-wrench'></i>
-                </div>
-            </div>
+        <img src="" id="imagePreview" />
+      </div>
+
+      <div class="colors-container">
+        <p class="error">Nothing to show...</p>
+      </div>
+    </div>
+
+    <div class="tags-container">
+      <h3>Image Data</h3>
+      <p class="error">Nothing to show...</p>
+      <div class="results"></div>
+      <div class="buttons">
+        <button id="seeMoreButton" style="display: none">See More</button>
+        <button id="exportTagsButton" style="display: none">Export Tags</button>
+      </div>
+    </div>
+
+    <div id="uploadModal" class="modal">
+      <div class="modal-content">
+        <h3>Uploading Image...</h3>
+        <div class="progress-bar">
+          <div id="uploadProgress" class="progress"></div>
         </div>
-    </header>
+      </div>
+    </div>
 
-    <section class="chats"></section>
-
-    <section class="prompt">
-        <form action="#" class="prompt__form" novalidate>
-            <div class="prompt__input-wrapper">
-                <input type="text" placeholder="Enter a prompt here" class="prompt__form-input" required>
-                <button class="prompt__form-button" id="sendButton">
-                    <i class='bx bx-send'></i>
-                </button>
-                <button class="prompt__form-button" id="deleteButton">
-                    <i class='bx bx-trash'></i>
-                </button>
-            </div>
-        </form>
-        <p class="prompt__disclaim">
-            Gemini may display inaccurate info, including about people, so double-check its responses.
-        </p>
-    </section>
-
-
-
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="script.js"></script>
-</body>
-
+  </body>
 </html>
